@@ -1,21 +1,40 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Home, Info, Wrench, FileText, Phone, Search, Menu, X } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Home, Info, Wrench, FileText, Phone, Search, Menu, X, LogIn, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import nmcLogo from "@/assets/nmc-logo.png";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const navItems = [
   { path: "/", label: "Home", icon: Home },
   { path: "/about", label: "About", icon: Info },
-  { path: "/services", label: "My Service", icon: Wrench },
+  { path: "/zones", label: "My Service", icon: Wrench },
   { path: "/complaint", label: "Complaint", icon: FileText },
   { path: "/contact", label: "Contact Us", icon: Phone },
 ];
 
 const Header = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, profile, role, signOut, loading } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
+
+  const displayName = profile 
+    ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email 
+    : user?.email;
 
   return (
     <header className="bg-card shadow-nmc-sm">
@@ -31,11 +50,11 @@ const Header = () => {
             />
             <div>
               <h1 className="text-xl font-bold text-primary font-display">
-                Swachh Nagpur
+                Mission Clean Nagpur
               </h1>
               <p className="text-xs text-muted-foreground">
-                <span className="text-accent font-medium">स्वच्छ नागपूर</span>
-                {" | "}Clean City, Green City
+                <span className="text-accent font-medium">स्वच्छता सेवा</span>
+                {" | "}Swachhata Sewa
               </p>
             </div>
           </Link>
@@ -55,12 +74,45 @@ const Header = () => {
               </button>
             </div>
             
-            <Button variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
-              Sign In
-            </Button>
-            <Button className="nmc-btn-accent border-0">
-              Register
-            </Button>
+            {!loading && (
+              <>
+                {user ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="gap-2 border-primary text-primary">
+                        <User className="w-4 h-4" />
+                        <span className="max-w-24 truncate">{displayName}</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <div className="px-2 py-1.5">
+                        <p className="text-sm font-medium">{displayName}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{role || 'citizen'}</p>
+                      </div>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => navigate("/my-complaints")}>
+                        My Complaints
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate("/my-events")}>
+                        My Events
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Sign Out
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
+                  <Link to="/auth">
+                    <Button className="nmc-btn-primary gap-2">
+                      <LogIn className="w-4 h-4" />
+                      Sign In
+                    </Button>
+                  </Link>
+                )}
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -141,12 +193,27 @@ const Header = () => {
             </ul>
 
             <div className="flex gap-3 mt-4 pt-4 border-t border-border">
-              <Button variant="outline" className="flex-1 border-primary text-primary">
-                Sign In
-              </Button>
-              <Button className="flex-1 nmc-btn-accent border-0">
-                Register
-              </Button>
+              {!loading && (
+                <>
+                  {user ? (
+                    <Button 
+                      variant="outline" 
+                      className="flex-1 border-destructive text-destructive"
+                      onClick={handleSignOut}
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </Button>
+                  ) : (
+                    <Link to="/auth" className="flex-1">
+                      <Button className="w-full nmc-btn-primary">
+                        <LogIn className="w-4 h-4 mr-2" />
+                        Sign In
+                      </Button>
+                    </Link>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

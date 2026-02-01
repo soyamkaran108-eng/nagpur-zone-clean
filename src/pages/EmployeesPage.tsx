@@ -1,51 +1,214 @@
-import { useState } from "react";
-import { Award, Star, Building, ThumbsUp, Search } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { 
+  Award, 
+  Star, 
+  MapPin, 
+  User,
+  Send,
+  Search,
+  Building
+} from "lucide-react";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Employee {
-  id: number;
+  id: string;
+  employee_id: string;
   name: string;
-  initials: string;
-  role: string;
+  job: string;
+  age: number | null;
   zone: string;
+  main_area: string | null;
+  photo_url: string | null;
   rating: number;
-  experience: number;
-  appreciations: number;
+  total_ratings: number;
 }
 
-const employees: Employee[] = [
-  { id: 1, name: "Rajesh Sharma", initials: "RS", role: "Truck Driver", zone: "Dharampeth", rating: 4.8, experience: 3, appreciations: 156 },
-  { id: 2, name: "Herolal Honda", initials: "HH", role: "Sweeper", zone: "Hanuman Nagar", rating: 4.9, experience: 5, appreciations: 203 },
-  { id: 3, name: "Saurabh Desai", initials: "SD", role: "Garbage Collector", zone: "Dhantoli", rating: 4.7, experience: 12, appreciations: 312 },
-  { id: 4, name: "Ramakant Pandey", initials: "RP", role: "Truck Driver", zone: "Nehru Nagar", rating: 4.6, experience: 7, appreciations: 189 },
-  { id: 5, name: "Meena Kumari", initials: "MK", role: "Sweeper", zone: "Sataranjipura", rating: 4.9, experience: 8, appreciations: 267 },
-  { id: 6, name: "Bhagwan Das", initials: "BD", role: "Garbage Collector", zone: "Lakadganj", rating: 4.5, experience: 4, appreciations: 134 },
-  { id: 7, name: "Priya Thakur", initials: "PT", role: "Supervisor", zone: "Ashi Nagar", rating: 4.8, experience: 10, appreciations: 298 },
-  { id: 8, name: "Santosh Yadav", initials: "SY", role: "Truck Driver", zone: "Mangalwari", rating: 4.7, experience: 6, appreciations: 178 },
-];
+interface EncouragementForm {
+  username: string;
+  address: string;
+  rating: number;
+  description: string;
+}
 
 const EmployeesPage = () => {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedZone, setSelectedZone] = useState<string>("all");
-  const [appreciatedIds, setAppreciatedIds] = useState<number[]>([]);
+  const [formData, setFormData] = useState<EncouragementForm>({
+    username: "",
+    address: "",
+    rating: 5,
+    description: "",
+  });
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const { user, profile } = useAuth();
+
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  useEffect(() => {
+    if (profile) {
+      setFormData(prev => ({
+        ...prev,
+        username: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
+        address: profile.address || "",
+      }));
+    }
+  }, [profile]);
+
+  const fetchEmployees = async () => {
+    const { data } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('is_active', true)
+      .order('rating', { ascending: false });
+    
+    if (data) {
+      setEmployees(data);
+    }
+  };
 
   const zones = [...new Set(employees.map((e) => e.zone))];
 
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch = emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          emp.role.toLowerCase().includes(searchQuery.toLowerCase());
+                          emp.job.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesZone = selectedZone === "all" || emp.zone === selectedZone;
     return matchesSearch && matchesZone;
   });
 
-  const totalAppreciations = employees.reduce((sum, emp) => sum + emp.appreciations, 0);
-  const avgRating = (employees.reduce((sum, emp) => sum + emp.rating, 0) / employees.length).toFixed(1);
+  const totalAppreciations = employees.reduce((sum, emp) => sum + emp.total_ratings, 0);
+  const avgRating = employees.length > 0 
+    ? (employees.reduce((sum, emp) => sum + emp.rating, 0) / employees.length).toFixed(1)
+    : "0.0";
 
-  const handleAppreciate = (id: number) => {
-    if (!appreciatedIds.includes(id)) {
-      setAppreciatedIds([...appreciatedIds, id]);
+  const handleOpenEncouragement = (employee: Employee) => {
+    if (!user) {
+      toast({
+        title: "Login Required",
+        description: "Please login to encourage employees.",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return;
     }
+    setSelectedEmployee(employee);
+    setIsDialogOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user || !selectedEmployee) return;
+
+    if (formData.rating < 1 || formData.rating > 5) {
+      toast({
+        title: "Invalid Rating",
+        description: "Please select a rating between 1 and 5 stars.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const { error } = await supabase
+      .from('employee_encouragements')
+      .insert({
+        user_id: user.id,
+        employee_id: selectedEmployee.id,
+        username: formData.username,
+        address: formData.address,
+        rating: formData.rating,
+        description: formData.description,
+      });
+
+    setIsSubmitting(false);
+
+    if (error) {
+      if (error.message.includes('duplicate')) {
+        toast({
+          title: "Already Encouraged",
+          description: "You have already encouraged this employee.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Submission Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+
+    // Update employee rating
+    const newTotalRatings = selectedEmployee.total_ratings + 1;
+    const newRating = ((selectedEmployee.rating * selectedEmployee.total_ratings) + formData.rating) / newTotalRatings;
+    
+    await supabase
+      .from('employees')
+      .update({
+        rating: newRating,
+        total_ratings: newTotalRatings,
+      })
+      .eq('id', selectedEmployee.id);
+
+    toast({
+      title: "Thank You!",
+      description: "Your encouragement has been submitted.",
+    });
+    setIsDialogOpen(false);
+    setFormData({
+      username: profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : "",
+      address: profile?.address || "",
+      rating: 5,
+      description: "",
+    });
+    fetchEmployees();
+  };
+
+  const renderStars = (rating: number, interactive = false, onSelect?: (rating: number) => void) => {
+    return (
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            onClick={() => interactive && onSelect?.(star)}
+            className={`${interactive ? "cursor-pointer hover:scale-110" : "cursor-default"} transition-transform`}
+            disabled={!interactive}
+          >
+            <Star 
+              className={`w-5 h-5 ${
+                star <= rating 
+                  ? "fill-yellow-400 text-yellow-400" 
+                  : "text-muted-foreground"
+              }`} 
+            />
+          </button>
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -58,10 +221,10 @@ const EmployeesPage = () => {
           </div>
           <div>
             <h1 className="font-display text-3xl font-bold text-foreground">
-              Our Shining Employees
+              Encourage the Employee
             </h1>
             <p className="text-muted-foreground">
-              These dedicated workers keep our city clean every day
+              Our Shining Employees, At your Service!
             </p>
           </div>
         </div>
@@ -107,75 +270,165 @@ const EmployeesPage = () => {
         </div>
 
         {/* Employee Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredEmployees.map((employee, index) => {
-            const isAppreciated = appreciatedIds.includes(employee.id);
-            return (
-              <div
-                key={employee.id}
-                className="nmc-card p-6 text-center animate-slide-up border-t-4 border-t-accent"
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                {/* Avatar */}
-                <div className="w-20 h-20 rounded-full bg-accent text-accent-foreground flex items-center justify-center text-2xl font-bold mx-auto mb-4">
-                  {employee.initials}
-                </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredEmployees.map((employee, index) => (
+            <div
+              key={employee.id}
+              className="nmc-card p-6 text-center animate-slide-up border-t-4 border-t-accent"
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              {/* Avatar */}
+              <div className="w-20 h-20 rounded-full bg-accent text-accent-foreground flex items-center justify-center mx-auto mb-4">
+                {employee.photo_url ? (
+                  <img 
+                    src={employee.photo_url} 
+                    alt={employee.name}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <User className="w-10 h-10" />
+                )}
+              </div>
 
-                {/* Info */}
-                <h3 className="font-semibold text-foreground text-lg">{employee.name}</h3>
-                <span className="inline-block px-3 py-1 bg-secondary rounded-full text-xs font-medium text-secondary-foreground mt-2">
-                  {employee.role}
-                </span>
+              {/* Info */}
+              <h3 className="font-semibold text-foreground text-lg">{employee.name}</h3>
+              <span className="inline-block px-3 py-1 bg-secondary rounded-full text-xs font-medium text-secondary-foreground mt-2">
+                {employee.job}
+              </span>
 
-                {/* Rating */}
-                <div className="flex items-center justify-center gap-1 mt-3">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`w-4 h-4 ${
-                        i < Math.floor(employee.rating)
-                          ? "text-yellow-400 fill-yellow-400"
-                          : "text-border"
-                      }`}
-                    />
-                  ))}
-                  <span className="text-sm text-muted-foreground ml-1">{employee.rating}</span>
-                </div>
+              {/* Rating */}
+              <div className="flex items-center justify-center gap-1 mt-3">
+                {renderStars(Math.round(employee.rating))}
+                <span className="text-sm text-muted-foreground ml-1">{employee.rating.toFixed(1)}</span>
+              </div>
 
-                {/* Details */}
-                <div className="flex items-center justify-center gap-2 mt-3 text-sm text-muted-foreground">
+              {/* Details */}
+              <div className="text-sm text-muted-foreground mt-3 space-y-1">
+                <p className="flex items-center justify-center gap-1">
                   <Building className="w-4 h-4" />
-                  <span>{employee.experience} years experience</span>
-                </div>
-
-                {/* Appreciate Button */}
-                <Button
-                  onClick={() => handleAppreciate(employee.id)}
-                  disabled={isAppreciated}
-                  className={`w-full mt-4 gap-2 ${
-                    isAppreciated
-                      ? "bg-primary/10 text-primary cursor-default"
-                      : "nmc-btn-primary"
-                  }`}
-                  variant={isAppreciated ? "outline" : "default"}
-                >
-                  <ThumbsUp className="w-4 h-4" />
-                  {isAppreciated ? "Appreciated!" : "Appreciate"}
-                </Button>
-
-                <p className="text-xs text-muted-foreground mt-2">
-                  {employee.appreciations + (isAppreciated ? 1 : 0)} appreciations
+                  ID: {employee.employee_id}
+                </p>
+                <p className="flex items-center justify-center gap-1">
+                  <MapPin className="w-4 h-4" />
+                  {employee.zone}
                 </p>
               </div>
-            );
-          })}
+
+              {/* Appreciate Button */}
+              <Button
+                onClick={() => handleOpenEncouragement(employee)}
+                className="w-full mt-4 nmc-btn-accent"
+              >
+                Encouragement Form
+              </Button>
+
+              <p className="text-xs text-muted-foreground mt-2">
+                {employee.total_ratings} appreciations
+              </p>
+            </div>
+          ))}
         </div>
 
         {filteredEmployees.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">No employees found matching your criteria.</p>
+          <div className="nmc-card p-8 text-center">
+            <Award className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="font-semibold text-foreground mb-2">No Employees Found</h3>
+            <p className="text-muted-foreground">
+              Try adjusting your search or filter criteria.
+            </p>
           </div>
         )}
+
+        {/* Encouragement Dialog */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display text-xl">
+                Encouragement Form
+              </DialogTitle>
+            </DialogHeader>
+            
+            {selectedEmployee && (
+              <div className="mb-4 p-4 bg-secondary rounded-xl">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                    {selectedEmployee.photo_url ? (
+                      <img 
+                        src={selectedEmployee.photo_url} 
+                        alt={selectedEmployee.name}
+                        className="w-full h-full rounded-full object-cover"
+                      />
+                    ) : (
+                      <User className="w-8 h-8 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Employee ID: {selectedEmployee.employee_id}</p>
+                    <p className="font-bold text-foreground">{selectedEmployee.name}</p>
+                    <p className="text-sm text-muted-foreground">{selectedEmployee.job}</p>
+                    <p className="text-sm text-muted-foreground">{selectedEmployee.zone}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  placeholder="Your name"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="address">Address</Label>
+                <Input
+                  id="address"
+                  placeholder="Your address"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Rate the Employee</Label>
+                <div className="flex items-center gap-2">
+                  {renderStars(formData.rating, true, (rating) => 
+                    setFormData({ ...formData, rating })
+                  )}
+                  <span className="text-sm text-muted-foreground ml-2">
+                    {formData.rating}/5
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Write a short description..."
+                  rows={3}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                />
+              </div>
+
+              <Button 
+                type="submit" 
+                className="w-full nmc-btn-primary gap-2"
+                disabled={isSubmitting}
+              >
+                <Send className="w-4 h-4" />
+                {isSubmitting ? "Submitting..." : "Submit"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );

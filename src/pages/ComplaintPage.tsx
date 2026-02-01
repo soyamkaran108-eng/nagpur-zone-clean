@@ -1,75 +1,190 @@
-import { useState } from "react";
-import { FileText, MapPin, Camera, Send, CheckCircle, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { 
+  FileText, 
+  ChevronRight, 
+  MapPin, 
+  Camera, 
+  Send,
+  Toilet,
+  Trash2,
+  Droplets,
+  Construction,
+  Sparkles,
+  Cylinder,
+  CheckCircle,
+  AlertCircle
+} from "lucide-react";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
-const complaintTypes = [
-  "Garbage Overflow",
-  "Missed Collection",
-  "Improper Dumping",
-  "Public Toilet Issue",
-  "Drainage Problem",
-  "Street Sweeping",
-  "Other",
-];
+const complaintSchema = z.object({
+  address: z.string().min(5, "Address is required"),
+  description: z.string().optional(),
+});
 
-const zones = [
-  "Dharampeth Zone",
-  "Hanuman Nagar Zone",
-  "Dhantoli Zone",
-  "Nehru Nagar Zone",
-  "Sataranjipura Zone",
-  "Lakadganj Zone",
-  "Ashi Nagar Zone",
-  "Mangalwari Zone",
-  "Gandhibagh Zone",
-  "Laxmi Nagar Zone",
-];
+type ComplaintFormData = z.infer<typeof complaintSchema>;
+
+interface ComplaintCategory {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  subcategories: string[];
+}
+
+const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  "toilet": Toilet,
+  "trash-2": Trash2,
+  "droplets": Droplets,
+  "construction": Construction,
+  "sparkles": Sparkles,
+  "cylinder": Cylinder,
+};
 
 const ComplaintPage = () => {
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    zone: "",
-    address: "",
-    complaintType: "",
-    description: "",
-  });
-  const [submitted, setSubmitted] = useState(false);
+  const [categories, setCategories] = useState<ComplaintCategory[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<ComplaintCategory | null>(null);
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const { user, profile } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Simulate submission
-    setSubmitted(true);
+  const form = useForm<ComplaintFormData>({
+    resolver: zodResolver(complaintSchema),
+    defaultValues: {
+      address: profile?.address || "",
+      description: "",
+    },
+  });
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    if (profile?.address) {
+      form.setValue("address", profile.address);
+    }
+  }, [profile, form]);
+
+  const fetchCategories = async () => {
+    const { data } = await supabase
+      .from('complaint_categories')
+      .select('*');
+    
+    if (data) {
+      setCategories(data.map(cat => ({
+        ...cat,
+        subcategories: typeof cat.subcategories === 'string' 
+          ? JSON.parse(cat.subcategories) 
+          : cat.subcategories || []
+      })));
+    }
   };
 
-  if (submitted) {
+  const reasons = ["Dirty", "Hazardous", "Stench", "Disease spreading", "Pollution"];
+
+  const handleReasonToggle = (reason: string) => {
+    setSelectedReasons(prev => 
+      prev.includes(reason) 
+        ? prev.filter(r => r !== reason)
+        : [...prev, reason]
+    );
+  };
+
+  const handleSubmit = async (data: ComplaintFormData) => {
+    if (!user) {
+      toast({
+        title: "Login Required",
+        description: "Please login to submit a complaint.",
+        variant: "destructive",
+      });
+      navigate("/auth");
+      return;
+    }
+
+    if (!selectedCategory || !selectedSubcategory) {
+      toast({
+        title: "Selection Required",
+        description: "Please select a category and subcategory.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const { error } = await supabase
+      .from('complaints')
+      .insert({
+        user_id: user.id,
+        category_id: selectedCategory.id,
+        subcategory: selectedSubcategory,
+        title: selectedSubcategory,
+        address: data.address,
+        description: data.description,
+        reason: selectedReasons,
+        status: 'pending',
+      });
+
+    setIsSubmitting(false);
+
+    if (error) {
+      toast({
+        title: "Submission Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSuccess(true);
+    toast({
+      title: "Complaint Submitted!",
+      description: "Your complaint has been registered successfully.",
+    });
+  };
+
+  if (isSuccess) {
     return (
       <MainLayout showSidebar>
-        <div className="max-w-2xl mx-auto text-center py-12 animate-scale-in">
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+        <div className="flex flex-col items-center justify-center py-16 animate-fade-in">
+          <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
             <CheckCircle className="w-10 h-10 text-primary" />
           </div>
-          <h2 className="font-display text-3xl font-bold text-foreground mb-4">
-            Complaint Registered Successfully!
+          <h2 className="font-display text-2xl font-bold text-foreground mb-2">
+            Complaint Submitted Successfully!
           </h2>
-          <p className="text-muted-foreground mb-2">
-            Your complaint reference number is:
+          <p className="text-muted-foreground text-center max-w-md mb-6">
+            Your complaint has been registered. We will review it and take appropriate action within 24-48 hours.
           </p>
-          <p className="text-2xl font-bold text-accent mb-6">
-            NMC-{Date.now().toString().slice(-8)}
-          </p>
-          <p className="text-muted-foreground mb-8">
-            Our team will address your complaint within 24-48 hours. 
-            You will receive updates via SMS and email.
-          </p>
-          <Button 
-            onClick={() => setSubmitted(false)} 
-            className="nmc-btn-primary"
-          >
-            Register Another Complaint
-          </Button>
+          <div className="flex gap-3">
+            <Button onClick={() => navigate("/my-complaints")} className="nmc-btn-primary">
+              View My Complaints
+            </Button>
+            <Button onClick={() => {
+              setIsSuccess(false);
+              setSelectedCategory(null);
+              setSelectedSubcategory(null);
+              setSelectedReasons([]);
+              form.reset();
+            }} variant="outline">
+              Submit Another
+            </Button>
+          </div>
         </div>
       </MainLayout>
     );
@@ -85,10 +200,10 @@ const ComplaintPage = () => {
           </div>
           <div>
             <h1 className="font-display text-3xl font-bold text-foreground">
-              Register Complaint
+              Complaint Section
             </h1>
             <p className="text-muted-foreground">
-              Report issues related to garbage collection and sanitation
+              Report issues in your area for quick resolution
             </p>
           </div>
         </div>
@@ -104,149 +219,149 @@ const ComplaintPage = () => {
           </div>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Category Selection */}
           <div className="nmc-card p-6">
-            <h3 className="font-semibold text-foreground mb-4">Personal Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="nmc-input"
-                  placeholder="Enter your full name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Phone Number *
-                </label>
-                <input
-                  type="tel"
-                  required
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="nmc-input"
-                  placeholder="+91 XXXXX XXXXX"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Email (Optional)
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="nmc-input"
-                  placeholder="your.email@example.com"
-                />
-              </div>
+            <h2 className="font-display text-xl font-bold text-foreground mb-4">
+              Select the Complaint Category
+            </h2>
+            
+            <div className="space-y-2">
+              {categories.map((category) => {
+                const Icon = iconMap[category.icon] || FileText;
+                const isSelected = selectedCategory?.id === category.id;
+                
+                return (
+                  <button
+                    key={category.id}
+                    onClick={() => {
+                      setSelectedCategory(category);
+                      setSelectedSubcategory(null);
+                    }}
+                    className={`w-full flex items-center gap-3 p-4 rounded-xl transition-all ${
+                      isSelected 
+                        ? "bg-primary text-primary-foreground" 
+                        : "bg-secondary hover:bg-secondary/80"
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span className="flex-1 text-left font-medium">{category.name}</span>
+                    <ChevronRight className={`w-4 h-4 transition-transform ${isSelected ? "rotate-90" : ""}`} />
+                  </button>
+                );
+              })}
             </div>
+
+            {/* Subcategories */}
+            {selectedCategory && selectedCategory.subcategories.length > 0 && (
+              <div className="mt-6 pt-6 border-t">
+                <h3 className="font-semibold text-foreground mb-3">
+                  {selectedCategory.name}
+                </h3>
+                <div className="space-y-2">
+                  {selectedCategory.subcategories.map((sub) => (
+                    <button
+                      key={sub}
+                      onClick={() => setSelectedSubcategory(sub)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all text-left ${
+                        selectedSubcategory === sub
+                          ? "bg-accent text-accent-foreground"
+                          : "bg-muted hover:bg-muted/80"
+                      }`}
+                    >
+                      <div className={`w-2 h-2 rounded-full ${
+                        selectedSubcategory === sub ? "bg-accent-foreground" : "bg-muted-foreground"
+                      }`} />
+                      <span className="text-sm">{sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
+          {/* Complaint Form */}
           <div className="nmc-card p-6">
-            <h3 className="font-semibold text-foreground mb-4">Location Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Select Zone *
-                </label>
-                <select
-                  required
-                  value={formData.zone}
-                  onChange={(e) => setFormData({ ...formData, zone: e.target.value })}
-                  className="nmc-input"
-                >
-                  <option value="">Select your zone</option>
-                  {zones.map((zone) => (
-                    <option key={zone} value={zone}>
-                      {zone}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Complaint Type *
-                </label>
-                <select
-                  required
-                  value={formData.complaintType}
-                  onChange={(e) => setFormData({ ...formData, complaintType: e.target.value })}
-                  className="nmc-input"
-                >
-                  <option value="">Select complaint type</option>
-                  {complaintTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Full Address *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="nmc-input"
-                  placeholder="Enter your complete address with landmark"
-                />
-              </div>
-            </div>
-          </div>
+            <h2 className="font-display text-xl font-bold text-foreground mb-4">
+              Online Complaint Form
+            </h2>
 
-          <div className="nmc-card p-6">
-            <h3 className="font-semibold text-foreground mb-4">Complaint Details</h3>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Description *
-              </label>
-              <textarea
-                required
-                rows={4}
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="nmc-input resize-none"
-                placeholder="Describe your complaint in detail..."
-              />
-            </div>
-
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Attach Photo (Optional)
-              </label>
-              <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
-                <Camera className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  Click to upload or drag and drop
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  PNG, JPG up to 5MB
+            {selectedSubcategory && (
+              <div className="mb-4 p-3 bg-primary/10 rounded-lg">
+                <p className="text-sm text-primary font-medium">
+                  Selected: {selectedSubcategory}
                 </p>
               </div>
-            </div>
-          </div>
+            )}
 
-          <div className="flex justify-end gap-4">
-            <Button type="button" variant="outline">
-              Cancel
-            </Button>
-            <Button type="submit" className="nmc-btn-primary gap-2">
-              <Send className="w-4 h-4" />
-              Submit Complaint
-            </Button>
+            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="address">Address</Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="address"
+                    placeholder="Enter your location/address"
+                    className="pl-10"
+                    {...form.register("address")}
+                  />
+                </div>
+                {form.formState.errors.address && (
+                  <p className="text-sm text-destructive">{form.formState.errors.address.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Reason</Label>
+                <div className="flex flex-wrap gap-2">
+                  {reasons.map((reason) => (
+                    <button
+                      key={reason}
+                      type="button"
+                      onClick={() => handleReasonToggle(reason)}
+                      className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                        selectedReasons.includes(reason)
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                      }`}
+                    >
+                      {reason}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Additional Information</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Provide any additional details..."
+                  rows={4}
+                  {...form.register("description")}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Add a Photo</Label>
+                <div className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary transition-colors cursor-pointer">
+                  <Camera className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Click to upload or drag and drop
+                  </p>
+                </div>
+              </div>
+
+              <Button 
+                type="submit" 
+                className="w-full nmc-btn-primary gap-2"
+                disabled={isSubmitting || !selectedSubcategory}
+              >
+                <Send className="w-4 h-4" />
+                {isSubmitting ? "Submitting..." : "Submit Complaint"}
+              </Button>
+            </form>
           </div>
-        </form>
+        </div>
       </div>
     </MainLayout>
   );
