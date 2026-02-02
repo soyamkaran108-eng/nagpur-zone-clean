@@ -1,4 +1,4 @@
-import { Mail, Phone, Calendar, Minus, Plus } from "lucide-react";
+import { Calendar, Leaf, Minus, Plus } from "lucide-react";
 
 const TopBar = () => {
   const today = new Date().toLocaleDateString("en-IN", {
@@ -11,21 +11,9 @@ const TopBar = () => {
   return (
     <div className="nmc-topbar py-2 px-4">
       <div className="container mx-auto flex items-center justify-between text-sm">
-        <div className="flex items-center gap-6">
-          <a 
-            href="mailto:support@nmc.gov.in" 
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-          >
-            <Mail className="w-4 h-4" />
-            <span className="hidden sm:inline">support@nmc.gov.in</span>
-          </a>
-          <a 
-            href="tel:1800-XXX-XXXX" 
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-          >
-            <Phone className="w-4 h-4" />
-            <span>1800-XXX-XXXX (Toll Free)</span>
-          </a>
+        <div className="flex items-center gap-3">
+          <Leaf className="w-4 h-4" />
+          <span className="font-medium">Swachh Nagpur | स्वच्छ नागपूर</span>
         </div>
         
         <div className="flex items-center gap-4">

@@ -6,7 +6,9 @@ import {
   Clock, 
   Award, 
   ChevronRight,
-  HelpCircle
+  HelpCircle,
+  Trash2,
+  Leaf
 } from "lucide-react";
 
 const sidebarItems = [
@@ -15,6 +17,8 @@ const sidebarItems = [
   { path: "/zones", label: "Zone Schedule", icon: MapPin },
   { path: "/timings", label: "Collection Timings", icon: Clock },
   { path: "/employees", label: "Appreciate Workers", icon: Award },
+  { path: "/waste-segregation", label: "Waste Segregation", icon: Trash2 },
+  { path: "/awareness", label: "Awareness & Tips", icon: Leaf },
 ];
 
 const Sidebar = () => {
