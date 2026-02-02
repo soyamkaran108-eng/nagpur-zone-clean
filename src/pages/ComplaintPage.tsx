@@ -7,7 +7,6 @@ import {
   FileText, 
   ChevronRight, 
   MapPin, 
-  Camera, 
   Send,
   Toilet,
   Trash2,
@@ -26,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import ImageUpload from "@/components/complaint/ImageUpload";
 
 const complaintSchema = z.object({
   address: z.string().min(5, "Address is required"),
@@ -56,6 +56,7 @@ const ComplaintPage = () => {
   const [selectedCategory, setSelectedCategory] = useState<ComplaintCategory | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [selectedReasons, setSelectedReasons] = useState<string[]>([]);
+  const [photoUrl, setPhotoUrl] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const { toast } = useToast();
@@ -137,6 +138,7 @@ const ComplaintPage = () => {
         address: data.address,
         description: data.description,
         reason: selectedReasons,
+        photo_url: photoUrl || null,
         status: 'pending',
       });
 
@@ -180,6 +182,7 @@ const ComplaintPage = () => {
               setSelectedCategory(null);
               setSelectedSubcategory(null);
               setSelectedReasons([]);
+              setPhotoUrl("");
               form.reset();
             }} variant="outline">
               Submit Another
@@ -341,15 +344,16 @@ const ComplaintPage = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>Add a Photo</Label>
-                <div className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary transition-colors cursor-pointer">
-                  <Camera className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Click to upload or drag and drop
-                  </p>
+              {user && (
+                <div className="space-y-2">
+                  <Label>Add a Photo (Optional)</Label>
+                  <ImageUpload
+                    userId={user.id}
+                    onImageUploaded={(url) => setPhotoUrl(url)}
+                    currentImageUrl={photoUrl}
+                  />
                 </div>
-              </div>
+              )}
 
               <Button 
                 type="submit" 
